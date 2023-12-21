@@ -1,0 +1,231 @@
+---
+title: "Data Visualization"
+author: "Fabienne van Kleef"
+date: "2023-09-27"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+#Load the data from csv.
+#loading necessary packages
+library(ggplot2)
+library(lubridate)
+stocks <- read.csv('/Users/fab/Downloads/datafordslab/World-Stock-Prices-Dataset.csv')
+#Report the dimensions of the data
+dim(stocks)
+#I have used ChatGPT to aid the production of the code used in this problem.
+```
+For this assignment, I will work with the World Stock Prices Dataset from Kaggle. The Dataset can be found here: https://www.kaggle.com/datasets/nelgiriyewithana/world-stock-prices-daily-updating. The dataset contains historical records of data of the stock prices of the world's most famous brands. It updates daily and spans from January 1st 2000, to now. It includes Date, Open, High,Low,Close,Volume,Dividends,Stock Splits, Brand_Name, Ticker, Industry_Tag and Country for each stock. 
+I want to explore investment in the Apple stock based on historical stock data for apple. For this strategy I will consider stock prices, trading volume, and other indicators. I will explore these using data visualization.
+
+## Research question
+Looking at the previous history of the apple stock, should I invest in the Apple stock or not? I will focus my analysis on closing prices, Volume and finally look at dividends as well as Bollinger bands and RSI
+
+## Variables of Interest 
+Variables of Interest are the closing prices, values traded, Dividend payouts, volatility, moving averages and price changes. 
+
+## Data Wrangling 
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(tidyr)
+
+
+# Filtering data:
+filtered_data <- stocks%>% 
+                 filter(Date >= as.Date("2020-01-01") & Brand_Name == "apple")
+
+# Calculate moving averages
+filtered_data <- filtered_data %>% 
+                 mutate(SMA20 = zoo::rollapply(Close, width = 20, FUN = mean, align='right', fill = NA),
+                        SMA50 = zoo::rollapply(Close, width = 50, FUN = mean, align='right', fill = NA))
+
+# Display the wrangled data
+head(filtered_data)
+
+#I have used ChatGPT to aid the production of the code used in this problem.
+```
+## Log-Scaled Closing Prices Over Time for apple
+```{r}
+
+selected_brand <- "apple"
+
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+
+# Filter data for apple
+apple_data <- stocks %>% filter(Brand_Name == selected_brand)
+
+# Convert the Date column to Date type
+apple_data$Date <- as.Date(apple_data$Date, format="%Y-%m-%d")
+
+# Plot closing prices over time with a logarithmic scale
+ggplot(apple_data, aes(x=Date, y=Close)) +
+  geom_line(color="blue") +
+  scale_y_log10() +  # Apply logarithmic scale
+  labs(title=paste("Log-Scaled Closing Prices Over Time for", selected_brand),
+       x="Date",
+       y="Log-Scaled Closing Price") +
+  theme_minimal()
+
+#I have used ChatGPT to aid the production of the code used in this problem.
+```
+The time-series plot of closing prices illustrates the long-term trend for Apple stock. Analyzing the overall price trend is useful to assess potential future growth.
+In this case, Apple shows a distinct positive upward trend over the full period. The steady price appreciation over the past two decades indicates Apple stock has been a good long-term investment historically.The consistent bullish trajectory also implies potential for continued future gains. While past performance doesn't guarantee future results, the strongly positive historical trend is a favorable indicator that Apple may remain a solid investment over the short-term horizon as well.
+
+## Value Traded and Closing Prices
+```{r}
+
+# Load necessary libraries
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+
+# Calculate Value Traded (Price x Quantity)
+apple_data$ValueTraded <- apple_data$Close * apple_data$Volume
+
+# Filter data for a specific recent time period for clarity
+apple_data <- apple_data %>% filter(Date >= as.Date("2022-01-01"))
+
+# Create a  plot with y-axis for closing prices
+ggplot(apple_data, aes(x=Date)) +
+    geom_col(aes(y=ValueTraded/1e9), fill="skyblue", alpha=0.6, width = 0.7) +
+    geom_line(aes(y=Close/10), color="red", size=1.5) +  # Adjusted the scale factor here for more pronounced movements
+    labs(title="Value Traded and Closing Prices",
+         x="Date", y="Value Traded (in billions)") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 8),  
+          axis.title.y = element_text(size = 10)) +
+    scale_y_continuous(
+      sec.axis = sec_axis(~.*10, name = "Closing Price")  # Adjusted scale factor for more pronounced movements
+    )
+
+#I have used ChatGPT to aid the production of the code used in this problem.
+```
+The bar plot overlays trading volumes and stock prices. Analyzing volume can identify correlations with price movements, as high volumes sometimes coincide with significant price changes.In this case, there are no major volume spikes aligned with price swings. The lack of unusual peaks in trading volume relative to price suggests there is no strong signal from investor interest or activity in the stock.Overall, the relatively stable trading volumes provide little additional insight into the analysis of Apple stock. Without major volume surges indicating pivotal investor-driven movements, further analysis would be needed to make an informed investment decision based on other factors besides trading activity.
+
+## Apple Stock Closing Prices with Dividend Dates Marked 
+```{r}
+ggplot(apple_data, aes(x=Date, y=Close)) +
+  geom_line(color="blue") +
+  geom_point(data=subset(apple_data, Dividends > 0), aes(y=Close), color="red", size=2) +
+  labs(title="Apple Stock Closing Prices with Dividend Payouts",
+       x="Date", y="Closing Price") +
+  theme_minimal()
+
+#I have used ChatGPT to aid the production of the code used in this problem.
+```
+
+The markers on the stock price trend line illustrate when dividends were paid out. Assessing the frequency and timing of dividend payouts is useful, as regular dividends can contribute to total return on investment.In this case, Apple has consistently paid dividends on a quarterly basis over the time period shown. The regular dividend payouts indicate Apple is a healthy company generating steady cash flows.
+Overall, the regular, consistent dividend payments are a positive sign regarding the potential for total returns on an investment in Apple stock. The frequent dividends boost total gains in addition to stock price appreciation over time.
+
+
+## Bollinger Bands 
+```{r}
+
+if (!requireNamespace("xts", quietly = TRUE)) {
+  install.packages("xts")
+}
+
+# Load the xts library
+library(xts)
+library(quantmod)
+# Convert the data frame to an xts object
+apple_xts <- xts(apple_data[, c("Open", "High", "Low", "Close", "Volume")],
+                 order.by=as.Date(apple_data$Date, format="%Y-%m-%d"))
+
+# Rename the columns to match the format expected by quantmod
+colnames(apple_xts) <- c("AAPL.Open", "AAPL.High", "AAPL.Low", "AAPL.Close", "AAPL.Volume")
+
+
+# Create a line chart using the xts object
+candleChart(apple_xts, theme=chartTheme("white"),
+            up.col='darkgreen', dn.col='darkred', bar.type='candles',
+            TA="addVo();addBBands();", multi.col=TRUE, width=0.75)
+
+#I have used ChatGPT to aid the production of the code used in this problem.
+```
+The line chart with Bollinger band overlay shows trend lines two standard deviations above and below a simple moving average, with the "squeeze" concept being when the bands come close together around the moving average, signaling low volatility and potential future increased volatility.
+Wider bands, as seen here in September 2023 compared to January 2023, suggest higher volatility and possibly exiting trades. However, the bands alone don't indicate direction or timing. Looking at the longer term upward trend, Apple stock has risen steadily over recent years and decades. But given the current wider bands, there could be an argument for waiting a few days or even months before investing As volatility usually is lower when shares go up compared to when they go down, the wider sideways band, signaling higher volatility, indicates uncertainty for the stock's next movement.
+
+## Moving Averages (SMA and EMA):
+```{r}
+library(TTR)
+
+# Calculate SMA and EMA
+apple_data$SMA <- SMA(apple_data$Close, n=20)
+apple_data$EMA <- EMA(apple_data$Close, n=20)
+
+# Plot
+# Create a plot with log-scaled y-axis
+ggplot(apple_data, aes(x=Date)) +
+    geom_line(aes(y=Close), color="blue") +
+    geom_line(aes(y=SMA), color="red") +
+    geom_line(aes(y=EMA), color="green") +
+    labs(title="Log-Scaled Moving Averages (SMA and EMA) and Closing Prices",
+         x="Date", y="Price (Log Scale)") +
+    theme_minimal() +
+    scale_y_log10()  # Apply log scale to the y-axis
+
+#I have used ChatGPT to aid the production of the code used in this problem.
+```
+
+In the Log-Scaled Moving Averages and Closing Prices chart, the green line (EMA) crossing above the red line (SMA) signals a potential upward trend in the stock’s price. This "golden cross" is often considered a bullish indicator in technical analysis.For an investor or trader observing this pattern, it could serve as a signal to consider buying the stock or increasing their position in anticipation of a continued upward movement however the bullish signal was already a while ago and the positive movement seems to have happened already.
+
+
+## Relative Strength Index (RSI):
+```{r}
+# Calculate RSI
+apple_data$RSI <- RSI(apple_data$Close, n=14)
+
+# Plot
+ggplot(apple_data, aes(x=Date, y=RSI)) +
+    geom_line(color="blue") +
+    geom_hline(yintercept = c(30, 70), linetype = "dashed") +
+    labs(title="Apple Stock RSI", x="Date", y="RSI") +
+    theme_minimal()
+
+#I have used ChatGPT to aid the production of the code used in this problem.
+```
+
+The RSI indicator measures recent price changes to gauge if a security is overbought or oversold. Values above 70 suggest the security is overbought and may be due for a pullback, while values below 30 indicate it is oversold and could bounce back. In this case, the RSI is in the middle, closer to overbought territory. This provides a short-term signal, so I'd wait to see if the indicator trends back down or up in coming months before deciding on a buy or sell signal. Overall, looking at multiple indicators, it's unclear whether to buy or sell currently. For risk management, it seems prudent to wait before buying in the short term until there are clearer signs of the stock's direction.
+
+
+## Conclusion 
+
+Overall, I conclude that Apple appears to be a good long term investment based on historical data.We can see the positive upward trend of the Log-scaled closing prices, as well as no unusual peaks in trading volume relative to price. Additionally there is periodic dividends paid out, leading us to conclude this is a healthy growing company. If we look at the short term I would hold up on trading the apple stock, as we have seen on the RSI chart and the Bollinger band analysis chart, there is indicators that show it isn't an ideal time to trade the stock. However on the contrary if we look at the Log scaled moving averages, we can observe an indicator that it may be a good time to trade the stock. Stock analysis is a multifaceted and intricate process, encompassing a wide array of variables and factors that can influence an investment decision. Indicators, such as moving averages, Bollinger Bands, and dividend yields, are valuable tools that provide insights and trends based on historical data. However, it’s crucial to recognize that these indicators are not infallible proofs but rather aids that supplement the decision-making process. They should be interpreted with caution, often in conjunction with other qualitative and quantitative analyses, including fundamental analysis, economic indicators, and market sentiments. The stock market is influenced by a complex interplay of factors, including corporate performance, economic conditions, investor sentiment, and geopolitical events. As such, a holistic approach that considers a broad spectrum of information is often necessary for making informed and prudent investment decisions.
+
+## Sources
+
+- **ChatGPT**
+
+- **World Stock Prices Dataset on Kaggle**  
+  [Source](https://www.kaggle.com/datasets/nelgiriyewithana/world-stock-prices-daily-updating)
+
+- **Bollinger Bands Explanation on Investopedia**  
+  [Source](https://www.investopedia.com/terms/b/bollingerbands.asp#:~:text=Bollinger%20Bands®%20gives%20traders,the%20market%20may%20be%20overbought.)
+
+- **How to Use RSI on Fidelity**  
+  [Source](https://www.fidelity.com/viewpoints/active-investor/how-to-use-RSI)
+
+- **Dividend Payment Cut Explanation on Investopedia**  
+  [Source](https://www.investopedia.com/ask/answers/06/dividendpaymentcut.asp#:~:text=Companies%20usually%20make%20drastic%20dividend,acquisition%20or%20a%20stock%20buyback.)
+
+- **Dividend Sleuthing with R on RViews**  
+  [Source](https://rviews.rstudio.com/2019/07/09/dividend-sleuthing-with-r/)
+
+- **Difference Between Simple and Exponential Moving Average on Investopedia**  
+  [Source](https://www.investopedia.com/ask/answers/difference-between-simple-exponential-moving-average/#:~:text=The%20exponential%20moving%20average%20gives,can%20use%20to%20guarantee%20success.)
+
+
+
+
